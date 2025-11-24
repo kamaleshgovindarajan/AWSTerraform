@@ -1,0 +1,24 @@
+What is Infrastructure as Code (IaC)?
+Infrastructure as Code is the process of defining your entire cloud infrastructure — servers, databases, networks, IAM roles — using code instead of manually creating resources through the console.
+Think of it as writing scripts for your infrastructure — scripts that can be version-controlled, tested, and automated.
+
+Terraform simplifies cloud infrastructure by letting you:
+Provision resources faster and consistently
+Avoid manual errors in the cloud console
+Version-control your infrastructure
+Save cost by automating teardown (terraform destroy) when not needed
+
+Without IaC:
+Every change is manual and error-prone
+Documentation drifts from the actual setup
+Scaling becomes complex
+Reproducibility is difficult (can’t replicate environments easily)
+Terraform eliminates these issues by maintaining a consistent, declarative infrastructure model.
+
+How Terraform Works
+Terraform interacts with AWS (or any cloud) using API calls.
+When you apply a Terraform configuration:
+Terraform reads your .tf files
+It connects with the cloud provider using credentials
+It compares your desired state vs. current infrastructure
+It provisions or updates resources accordingly
