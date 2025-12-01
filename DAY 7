@@ -1,0 +1,141 @@
+backend.tf 
+
+terraform {
+  backend "s3" {
+    bucket = "kamalesh-terraform-state-18236374"   # where the state file will be backed , create this bucket seperately
+    key    = "day05-2/terraform.tfstate"               # path inside the bucket to store the state file
+    region = "us-east-1"
+    encrypt = true
+    use_lockfile = true
+  }
+}
+
+--
+locals.tf
+
+locals {
+    vpc_name = "${var.environment}-vpc"
+    bucket_name = "${var.environment}-bucket-18236374-${var.region}"
+}
+
+--
+main.tf
+
+
+# Create a VPC
+resource "aws_vpc" "first_vpc" {
+  cidr_block = "10.0.0.0/16"
+  region = var.allover_object.region
+  tags = {
+    Name = var.environment
+
+  }
+}
+# create a s3 bucket
+resource "aws_s3_bucket" "first_bucket" {
+  bucket = var.allover_object.bucket_name
+
+  tags = {
+    Name        = "My bucket"
+    Environment = var.environment
+    vpc_id = aws_vpc.first_vpc.id
+  }
+}
+
+resource "aws_instance" "example" {
+  ami           = "resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+  instance_type = var.instance_type[0]
+  count         = var.allover_object.instance_count
+  monitoring    = var.instance_details[2]
+  region        = tolist(var.allowed_regions)[2]
+
+  tags = var.tags
+}
+
+--
+output.tf
+
+output "vpc_id" {
+  value = aws_vpc.first_vpc.id
+}
+output "s3_bucket_name" {
+  value = aws_s3_bucket.first_bucket.bucket
+}
+
+--
+provider.tf
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+# Configure the AWS Provider
+provider "aws" {
+  region = var.region
+}
+
+--
+variables.tf
+
+variable "region" {
+  default = "us-east-1"
+  type= string
+  }
+
+variable "environment" {
+  default = "dev"
+  type = string
+}
+
+variable "instance_count" {
+  default = 2
+  type = number
+}
+
+variable "monitoring_enabled" {
+  default = true
+  type = bool
+}
+
+variable "instance_type" {
+  type = list(string)
+  default = ["t3.large", "t3.medium", "t3.micro"]
+}
+
+variable "allowed_regions" {
+  type = set(string)
+  default = ["us-east-1", "us-west-2", "eu-west-1"]
+}
+
+variable "tags" {
+  type = map(string)
+  default = {
+    Environment = "dev"
+    Name = "dev-test-instance"
+  }
+}
+
+variable "instance_details" {
+  type = tuple([number, string, bool ])
+  default = [2, "us-east-1",false]
+}
+
+variable "allover_object" {
+  type = object ({
+    bucket_name = string
+    instance_count = number
+    monitoring = bool
+    region = string
+  })
+  default = {
+    bucket_name = "variable-test-bucket-861861"
+    instance_count = 2
+    monitoring = true
+    region = "ap-south-1"
+  }
+}
+--
