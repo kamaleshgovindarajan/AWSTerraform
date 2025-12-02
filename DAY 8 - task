@@ -1,0 +1,91 @@
+Task 1: Understanding COUNT
+Objective: Create two S3 buckets using a single resource block with count
+
+Create a variable of type list(string) for bucket names
+Use count to iterate through the bucket names
+Reference bucket names using count.index
+Run terraform plan to see the resources
+
+variable.tf
+variable "buckets" {
+description = "values for s3 buckets"
+type = list(string)
+default = ["bucket-one-126543", "bucket-two-127543"]
+}
+
+main.tf
+resource "aws_s3_bucket" "bulb" {
+  count = 3
+  bucket = var.buckets[count.index]
+}
+
+---
+
+Task 2: Understanding FOR_EACH
+Objective: Create two S3 buckets using a single resource block with for_each
+
+Create a variable of type set(string) for bucket names
+Use for_each to iterate through the bucket names
+Reference bucket names using each.value
+Compare resource addressing: [0] vs ["bucket-name"]
+
+variable.tf
+variable "buckets_set" {
+description = variable test for set"
+type = set(string)
+default = ["bucket-onekamu-126543", "bucket-twokamu-127543"]
+}
+
+main.tf
+resource "aws_s3_bucket" "slip"
+for_each = var.bucket_set
+bucket = each.value
+}
+
+---
+Task 3: Output with FOR Loop
+Objective: Display bucket information using for expressions
+
+Create output to print all bucket names using a for loop
+Create output to print all bucket IDs using a for expression
+Run terraform output to verify
+
+output.tf
+output "bucket_name" {
+  value = [for b in aws_s3_bucket.bulb : b.bucket]
+}
+output "bucket_nameslip" {
+  value = [for b in aws_s3_bucket.slip : b.bucket]
+}
+
+output "bucket_id" {
+  value = [for b in aws_s3_bucket.bulb : b.id]
+}
+output "bucket_idslip" {
+  value = [for b in aws_s3_bucket.slip : b.id]
+}
+
+On terraform plan
++ bucket_name     = [
+      + "bucket-one-861861",
+      + "bucket-one-861861",
+      + "bucket-two-861861",
+      + "bucket-three-861861",
+      + "bucket-two-861861",
+      + "bucket-three-861861",
+      + "bucket-three-861861",
+    ]
+  + bucket_nameslip = [
+      + "bucket-onekamu-861861",
+      + "bucket-twokamu-861861",
+      + "bucket-threekamu-861861",
+    ]
+  + bucket_idslip   = [
+      + (known after apply),
+      + (known after apply),
+      + (known after apply)
+---
+
+
+
+
