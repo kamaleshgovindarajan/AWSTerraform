@@ -1,0 +1,140 @@
+variable.tf
+variable "region" {
+  default = "us-east-1"
+  type= string
+  }
+
+variable "environment" {
+  default = "dev"
+  type = string
+}
+
+variable "instance_count" {
+  default = 2
+  type = number
+}
+
+variable "monitoring_enabled" {
+  default = true
+  type = bool
+}
+
+variable "instance_type" {
+  type = list(string)
+  default = ["t3.large", "t3.medium", "t3.micro"]
+}
+
+variable "allowed_regions" {
+  type = set(string)
+  default = ["us-east-1", "us-west-2", "eu-west-1"]
+}
+
+variable "tags" {
+  type = map(string)
+  default = {
+    Environment = "dev"
+    Name = "dev-test-instance"
+  }
+}
+
+variable "instance_details" {
+  type = tuple([number, string, bool ])
+  default = [2, "us-east-1",false]
+}
+
+variable "allover_object" {
+  type = object ({
+    bucket_name = string
+    instance_count = number
+    monitoring = bool
+    region = string
+  })
+  default = {
+    bucket_name = "variable-test-bucket-861861"
+    instance_count = 2
+    monitoring = true
+    region = "ap-south-1"
+  }
+}
+
+variable "buckets" {
+  description = "test for count"
+  type = list(string)
+  default = ["bucket-one-861861", "bucket-two-861861", "bucket-three-861861"]
+}
+
+variable "buckets_set" {
+  description = "test for set"
+  type = set(string)
+  default = ["bucket-four-861861", "bucket-five-861861", "bucket-six-861861"]
+}
+
+variable "buckets_map" {
+  description = "test for map"
+  type = map(string)
+  default = {
+    bucket1 = "bucket-onekamu-861861"
+    bucket2 = "bucket-twokamu-861861"
+    bucket3 = "bucket-threekamu-861861"
+  }
+}
+
+---
+
+main.tf
+
+resource "aws_s3_bucket" "bucket1" {
+  count = 3
+  bucket = var.buckets[count.index]
+  tags = var.tags
+  depends_on = [aws_s3_bucket.bucket2]
+}
+
+resource "aws_s3_bucket" "bucket2" {
+  for_each = var.buckets_set
+  bucket = each.value
+  tags = var.tags
+  depends_on = [aws_s3_bucket.bucket3]
+  }
+
+resource "aws_s3_bucket" "bucket4"{
+  for_each = var.buckets_map
+  bucket = each.value
+  tags = var.tags
+}
+
+resource "aws_s3_bucket" "bucket3"{
+  for_each = var.buckets_map
+  bucket = each.key
+  tags = var.tags
+}
+
+resource "aws_s3_bucket" "bulb" {
+  count = 3
+  bucket = var.buckets[count.index]
+  depends_on = [aws_s3_bucket.slip]
+}
+
+resource "aws_s3_bucket" "slip"{
+  for_each = var.buckets_map
+  bucket = each.value
+}
+---
+
+output.tf
+
+output "bucket_name" {
+  value = [for b in aws_s3_bucket.bulb : b.bucket]
+}
+output "bucket_nameslip" {
+  value = [for b in aws_s3_bucket.slip : b.bucket]
+}
+
+output "bucket_id" {
+  value = [for b in aws_s3_bucket.bulb : b.id]
+}
+output "bucket_idslip" {
+  value = [for b in aws_s3_bucket.slip : b.id]
+}
+
+---
