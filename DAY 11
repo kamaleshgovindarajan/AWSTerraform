@@ -1,0 +1,99 @@
+variables.tf
+
+
+variable "region" {
+  default = "us-east-1"
+  type= string
+  }variable "bucket_name" {
+  type = string
+  default = "KAMALESH variable bucket 18 43 64 54"
+}
+
+variable "tags2"{
+  type = map(string)
+  default = {
+    created_by = "terraform"
+    project = "backup"
+  }
+}
+
+variable "allowed_ports" {
+  type = string
+  default = "80,443,22,8080"
+}
+
+variable "environment" {
+  default = "DeV"
+  type = string
+}
+
+variable "instance_type" {
+  type = list(string)
+  default = ["t3.large", "t3.medium", "t3.micro", "t2.micro"]
+}
+
+variable "test_regions" {
+  type = map(string)
+  default = {
+    dev = "us-east-1"
+    prod = "us-west-2"
+    test = "eu-west-1"
+  }
+}
+
+variable "tags" {
+  type = map(string)
+  default = {
+    Environment = "dev"
+    Name = "dev-test-instance"
+  }
+}
+
+----
+
+locals.tf
+
+locals{
+    environment = lower(var.environment)
+    bucket_name = substr((lower(replace(var.bucket_name," ","-"))),0,63)
+    tags = merge(var.tags, var.tags2)
+    region = lookup(var.test_regions, local.environment, var.region)
+    port_list = split(",", var.allowed_ports)
+    sg_rules = [
+        for port in local.port_list:
+        {
+            name = "port-${port}"
+            port = tonumber(port)
+            description = "Allow inbound traffic on port ${port}"
+        }
+    ]
+}
+
+----
+
+output.tf
+
+output "sg_rules" {
+    value = local.sg_rules
+}
+output "port_list" {
+    value = local.port_list
+}
+
+----
+
+main.tf
+
+  resource "aws_instance" "my_instance" {
+  ami           = "ami-0c55xxxxxxxxx"
+  instance_type = var.instance_type[0]
+  region        = local.region
+  tags = {
+    Environment = local.environment
+  }
+  }
+
+  resource "aws_s3_bucket" "test_bucket" {
+    bucket = local.bucket_name
+    tags   = local.tags
+  }
