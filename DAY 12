@@ -1,0 +1,108 @@
+variables.tf
+
+variable "instance_type" {
+  type = string
+  default = "t3.large"
+
+  
+  validation{
+    condition = length(var.instance_type) >= 2 && length(var.instance_type) <= 20 
+    error_message = "instance type must be less then 20 & greater than 2 characters"
+  }
+
+  validation {
+    condition = can(regex("^t[2-3]\\.",var.instance_type))
+    error_message = "Instance type should be only t2 or t3"
+  }
+
+}
+
+variable "backup_name" {
+  default = "daily_backup"
+  validation {
+    condition = endswith(var.backup_name, "_backup")
+    error_message = "backup name must end with '_backup'"
+  }
+}
+
+variable "credentials" {
+  default = "abc123"
+  sensitive = true
+}
+
+variable "user_locations" {
+  default = ["us-east-1", "eu-west-2", "us-east-1"]
+}
+variable "default_locations" {
+  default = ["us-west-1"]
+}
+variable "monthly_costs"{
+  default = [-50, 100, 75, 200]
+}
+
+
+----
+locals.tf
+
+locals{
+    all_locations = concat(var.user_locations,var.default_locations)
+    unique_locations = toset(local.all_locations)
+    positive_cost = [ for cost in var.monthly_costs : abs(cost)]
+    total_cost = sum(local.positive_cost)
+    max_cost = max(local.positive_cost ... )
+    min_cost = min(local.positive_cost ... )
+    avg_cost = local.total_cost / length(local.positive_cost)
+    current_timestamp = timestamp()
+    format1 = formatdate("yyyymmdd",local.current_timestamp)
+    format2 = formatdate("yyMMdd",local.current_timestamp)
+    timestamp_name = "backup-{$ local.format1 }"
+    config_file_exists = fileexists("./config.json")
+    config_data = local.config_file_exists ? jsondecode(file("./config.json")):{}
+    }
+
+----
+output.tf
+
+output "cred" {
+    value = var.credentials
+    sensitive = true
+}
+output "locations" {
+    value = local.all_locations
+}
+output "unique_locations" {
+    value = local.unique_locations
+}
+output "positive_cost" {
+    value = local.positive_cost
+}
+output "max_cost" {
+    value = local.max_cost
+}
+output "min_cost" {
+    value = local.min_cost
+}
+output "total_cost" {
+    value = local.total_cost
+}
+output "avg_cost" {
+    value = local.avg_cost
+}
+output "current_timestamp" {
+    value = local.current_timestamp
+}
+output "format1" {
+    value = local.format1
+}
+output "format2" {
+    value = local.format2
+}
+output "timestamp_name" {
+    value = local.timestamp_name
+}
+output "config_file_exists" {
+    value = local.config_file_exists
+}
+output "configdata" {
+    value = local.config_data
+}
