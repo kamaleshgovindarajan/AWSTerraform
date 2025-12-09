@@ -1,0 +1,55 @@
+variable.tf
+
+variable "instance_type" {
+  type = list(string)
+  default = ["t3.large", "t3.medium", "t3.micro", "t2.micro"]
+}
+
+variable "environment" {
+  default = "dev"
+  type = string
+}
+
+variable "tags" {
+  type = map(string)
+  default = {
+    Environment = "dev"
+    Name = "dev-test-instance"
+  }
+}
+
+---
+
+main.tf
+
+data "aws_vpc" "vpc_name" {
+  filter {
+    name = "tag:Name"
+    values = ["default"]
+  }
+}
+
+data "aws_subnet" "subnet_name" {
+  filter {
+    name = "tag:Name"
+    values = ["subnetdefault"]
+  }
+  vpc_id = data.aws_vpc.vpc_name.id
+}
+
+data "aws_ami" "image_name" {
+  owners = ["amazon"]
+  most_recent = true
+  filter {
+    name = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+}
+
+
+resource "aws_instance" "example" {
+  ami          = data.aws_ami.image_name.id
+  instance_type = var.environment == "dev" ? var.instance_type[3] : var.instance_type[2]
+  subnet_id = data.aws_subnet.subnet_name.id
+  tags = var.tags
+}
