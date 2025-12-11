@@ -1,0 +1,461 @@
+provider.tf
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+# Configure the AWS Provider
+provider "aws" {
+  region = var.primary
+  alias = "primary"
+}
+provider "aws" {
+  region = var.secondary
+  alias = "secondary"
+}
+
+--------
+
+variables.tf
+
+variable "primary" {
+  default = "us-east-1"
+}
+
+variable "secondary" {
+  default = "us-west-2"
+}
+
+variable "primary_vpc_cidr"{
+  default = "10.0.0.0/16"
+}
+
+variable "secondary_vpc_cidr"{
+  default = "10.1.0.0/16"
+}
+variable "primary_region" {
+  default = "us-east-1"
+}
+
+variable "secondary_region" {
+  default = "us-west-2"
+}
+
+variable "instance_type" {
+  default = "t2.micro"
+}
+
+variable "primary_key_name" {
+  description = "Name of the SSH key pair for Primary VPC instance (us-east-1)"
+  type        = string
+  default     = ""
+}
+
+variable "secondary_key_name" {
+  description = "Name of the SSH key pair for Secondary VPC instance (us-west-2)"
+  type        = string
+  default     = ""
+}
+
+variable "primary_subnet_cidr" {
+  description = "CIDR block for the primary subnet"
+  type        = string
+  default     = "10.0.1.0/24"
+}
+
+variable "secondary_subnet_cidr" {
+  description = "CIDR block for the secondary subnet"
+  type        = string
+  default     = "10.1.1.0/24"
+}
+
+------
+
+data.tf
+
+data "aws_availability_zones" "primary"{
+    provider = aws.primary
+    state = "available"
+}
+
+data "aws_availability_zones" "secondary"{
+    provider = aws.secondary
+    state = "available"
+}
+
+data "aws_ami" "primary_ami" {
+  provider    = aws.primary
+  most_recent = true
+  owners      = ["099720109477"] # Canonical (Ubuntu)
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+}
+
+# Data source for Secondary region AMI (Ubuntu 24.04 LTS)
+data "aws_ami" "secondary_ami" {
+  provider    = aws.secondary
+  most_recent = true
+  owners      = ["099720109477"] # Canonical (Ubuntu)
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+}
+
+------
+
+locals.tf
+
+
+locals {
+  # User data template for Primary instance
+  primary_user_data = <<-EOF
+    #!/bin/bash
+    apt-get update -y
+    apt-get install -y apache2
+    systemctl start apache2
+    systemctl enable apache2
+    echo "<h1>Primary VPC Instance - ${var.primary}</h1>" > /var/www/html/index.html
+    echo "<p>Private IP: $(hostname -I)</p>" >> /var/www/html/index.html
+  EOF
+
+  # User data template for Secondary instance
+  secondary_user_data = <<-EOF
+    #!/bin/bash
+    apt-get update -y
+    apt-get install -y apache2
+    systemctl start apache2
+    systemctl enable apache2
+    echo "<h1>Secondary VPC Instance - ${var.secondary}</h1>" > /var/www/html/index.html
+    echo "<p>Private IP: $(hostname -I)</p>" >> /var/www/html/index.html
+  EOF
+}
+
+
+--------
+
+terraform.tfvars
+
+primary_key_name   = "vpc-peering-demo-east"
+secondary_key_name = "vpc-peering-demo-west"
+
+--------
+
+main.tf
+
+resource "aws_vpc" "primary_vpc" {
+  cidr_block       = var.primary_vpc_cidr
+  provider         = aws.primary
+  enable_dns_hostnames = true      #For the vpc peering to work need to enable dns hostnames & dns support in vpc
+  enable_dns_support = true
+
+  tags = {
+    Name = "Primary-vpc-${var.primary}"
+  }
+}
+
+resource "aws_vpc" "secondary_vpc" {
+  cidr_block       = var.secondary_vpc_cidr
+  provider         = aws.secondary
+  enable_dns_hostnames = true      #For the vpc peering to work need to enable dns hostnames & dns support in vpc
+  enable_dns_support = true
+
+  tags = {
+    Name = "Primary-vpc-${var.secondary}"
+  }
+}
+
+resource "aws_subnet" "primary_subnet" {
+  provider   = aws.primary
+  vpc_id     = aws_vpc.primary_vpc.id
+  cidr_block = var.primary_subnet_cidr
+  availability_zone  =data.aws_availability_zones.primary.names[0]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "Primary-Subnet-${var.primary}"
+    Environment = "Demo"
+
+  }
+}
+
+resource "aws_subnet" "secondary_subnet" {
+  provider   = aws.secondary
+  vpc_id     = aws_vpc.secondary_vpc.id
+  cidr_block = var.secondary_subnet_cidr
+  availability_zone  =data.aws_availability_zones.secondary.names[0]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "Secondary-Subnet-${var.secondary}"
+    Environment = "Demo"
+
+  }
+}
+
+resource "aws_internet_gateway" "primary_igw"{
+  provider = aws.primary
+  vpc_id   = aws_vpc.primary_vpc.id
+
+  tags = {
+    Name = "Primary-IGW-${var.primary}"
+    Environment = "Demo"
+  }
+
+}
+
+resource "aws_internet_gateway" "secondary_igw"{
+  provider = aws.secondary
+  vpc_id   = aws_vpc.secondary_vpc.id
+
+  tags = {
+    Name = "Secondary-IGW-${var.secondary}"
+    Environment = "Demo"
+
+  }
+
+}
+
+resource "aws_route_table" "primary_rt"{
+  provider = aws.primary
+  vpc_id   = aws_vpc.primary_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.primary_igw.id
+  }
+  tags = {
+    Name = "Primary-route-table"
+    Environment = "Demo"
+  }
+
+}
+
+resource "aws_route_table" "secondary_rt"{
+  provider = aws.secondary
+  vpc_id   = aws_vpc.secondary_vpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.secondary_igw.id
+  }
+  tags = {
+    Name = "Secondary-route-table"
+    Environment = "Demo"
+  }
+
+}
+
+resource "aws_route_table_association" "primary_rta" {
+  provider = aws.primary
+  subnet_id = aws_subnet.primary_subnet.id
+  route_table_id = aws_route_table.primary_rt.id
+
+}
+
+resource "aws_route_table_association" "secondary_rta" {
+  provider = aws.secondary
+  subnet_id = aws_subnet.secondary_subnet.id
+  route_table_id = aws_route_table.secondary_rt.id
+
+}
+
+resource "aws_vpc_peering_connection" "primary_to_secondary"{
+  provider = aws.primary
+  vpc_id = aws_vpc.primary_vpc.id
+  peer_vpc_id = aws_vpc.secondary_vpc.id
+  peer_region = var.secondary_region 
+  auto_accept = false 
+  tags = {
+    Name = "Primary-to-secondary peering"
+    Environment = "Demo"
+    Side  = "Requester"
+  }
+}
+
+resource "aws_vpc_peering_connection_accepter" "secondary_accepter"{
+  provider = aws.secondary
+  vpc_peering_connection_id = aws_vpc_peering_connection.primary_to_secondary.id
+  auto_accept = true
+  tags = {
+    Name = "Secondary to Primary peering"
+    Environment = "Demo"
+    Side  = "Accepter"
+  }
+}
+
+resource "aws_route" "primary_to_secondary" {
+  provider                  = aws.primary
+  route_table_id            = aws_route_table.primary_rt.id
+  destination_cidr_block    = var.secondary_vpc_cidr
+  vpc_peering_connection_id = aws_vpc_peering_connection.primary_to_secondary.id
+
+  depends_on = [aws_vpc_peering_connection_accepter.secondary_accepter]
+}
+
+resource "aws_route" "secondary_to_primary" {
+  provider                  = aws.secondary
+  route_table_id            = aws_route_table.secondary_rt.id
+  destination_cidr_block    = var.primary_vpc_cidr
+  vpc_peering_connection_id = aws_vpc_peering_connection.primary_to_secondary.id
+
+  depends_on = [aws_vpc_peering_connection_accepter.secondary_accepter]
+}
+
+resource "aws_security_group" "primary_sg" {
+  provider    = aws.primary
+  name        = "primary-vpc-sg"
+  description = "Security group for Primary VPC instance"
+  vpc_id      = aws_vpc.primary_vpc.id
+
+  ingress {
+    description = "SSH from anywhere"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "ICMP from Secondary VPC"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [var.secondary_vpc_cidr]
+  }
+
+  ingress {
+    description = "All traffic from Secondary VPC"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = [var.secondary_vpc_cidr]
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "Primary-VPC-SG"
+    Environment = "Demo"
+  }
+}
+
+# Security Group for Secondary VPC EC2 instance
+resource "aws_security_group" "secondary_sg" {
+  provider    = aws.secondary
+  name        = "secondary-vpc-sg"
+  description = "Security group for Secondary VPC instance"
+  vpc_id      = aws_vpc.secondary_vpc.id
+
+  ingress {
+    description = "SSH from anywhere"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "ICMP from Primary VPC"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [var.primary_vpc_cidr]
+  }
+
+  ingress {
+    description = "All traffic from Primary VPC"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = [var.primary_vpc_cidr]
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name        = "Secondary-VPC-SG"
+    Environment = "Demo"
+  }
+}
+
+# EC2 Instance in Primary VPC
+resource "aws_instance" "primary_instance" {
+  provider               = aws.primary
+  ami                    = data.aws_ami.primary_ami.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.primary_subnet.id
+  vpc_security_group_ids = [aws_security_group.primary_sg.id]
+  key_name               = var.primary_key_name
+
+  user_data = local.primary_user_data
+
+  tags = {
+    Name        = "Primary-VPC-Instance"
+    Environment = "Demo"
+    Region      = var.primary
+  }
+
+  depends_on = [aws_vpc_peering_connection_accepter.secondary_accepter]
+}
+
+# EC2 Instance in Secondary VPC
+resource "aws_instance" "secondary_instance" {
+  provider               = aws.secondary
+  ami                    = data.aws_ami.secondary_ami.id
+  instance_type          = var.instance_type
+  subnet_id              = aws_subnet.secondary_subnet.id
+  vpc_security_group_ids = [aws_security_group.secondary_sg.id]
+  key_name               = var.secondary_key_name
+
+  user_data = local.secondary_user_data
+
+  tags = {
+    Name        = "Secondary-VPC-Instance"
+    Environment = "Demo"
+    Region      = var.secondary
+  }
+
+  depends_on = [aws_vpc_peering_connection_accepter.secondary_accepter]
+}
+-----------
