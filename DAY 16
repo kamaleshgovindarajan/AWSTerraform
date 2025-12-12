@@ -1,0 +1,98 @@
+data.tf
+
+data "aws_caller_identity" "name" {
+}
+
+-----
+
+locals.tf
+
+locals {
+  users = csvdecode(file("users.csv"))
+}
+
+-----
+
+output.tf
+
+output "user_names" {
+   value = [ for user in local.users : "${user.first_name}${user.last_name}"]
+}
+
+output "passwords"{
+   value = {
+      for user,profile in aws_iam_user_login_profile.users:
+      user => "password created - user must reset on first lopgin"
+   }
+   sensitive = true
+}
+
+output "account_id"{
+    value = data.aws_caller_identity.name
+  }
+
+-----
+
+main.tf
+
+resource "aws_iam_user" "users" {
+  for_each = { for user in local.users: user.first_name => user }
+  name = lower("${substr(each.value.first_name,0,1)}${each.value.last_name}")
+  path = "/users/"
+  tags = {
+    "DisplayName" = "${each.value.first_name}${each.value.last_name}"
+    "Department" = each.value.department
+    "JobTitle"   = each.value.job_title
+  }
+}
+
+resource "aws_iam_user_login_profile" "users" {
+    for_each = aws_iam_user.users
+    user = each.value.name
+    password_reset_required = true
+    lifecycle {
+      ignore_changes = [ password_reset_required, password_length ]
+    }
+}
+
+resource "aws_iam_group" "developers" {
+  name = "developers"
+  path = "/groups/"
+}
+
+resource "aws_iam_group" "devops" {
+  name = "devops"
+  path = "/groups/"
+}
+
+resource "aws_iam_group" "qa" {
+  name = "qa"
+  path = "/groups/"
+}
+
+resource "aws_iam_group_membership" "developer_members" {
+  name = "developers-group-membership"
+  group = aws_iam_group.developers.name
+
+  users = [
+    for user in aws_iam_user.users : user.name if user.tags.Department == "developer"
+  ]
+}
+
+resource "aws_iam_group_membership" "devops_members" {
+  name = "devops-group-membership"
+  group = aws_iam_group.devops.name
+
+  users = [
+    for user in aws_iam_user.users : user.name if user.tags.Department == "devops"
+  ]
+}
+
+resource "aws_iam_group_membership" "qa_members" {
+  name = "qa-group-membership"
+  group = aws_iam_group.qa.name
+
+  users = [
+    for user in aws_iam_user.users : user.name if user.tags.Department == "QA"
+  ]
+}
