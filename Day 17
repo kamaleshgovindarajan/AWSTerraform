@@ -1,0 +1,467 @@
+blue-environment.tf
+
+# Application Version 1.0 (Blue Environment - Production)
+resource "aws_s3_object" "app_v1" {
+  bucket = aws_s3_bucket.app_versions.id
+  key    = "app-v1.zip"
+  source = "${path.module}/app-v1/app-v1.zip"
+  etag   = filemd5("${path.module}/app-v1/app-v1.zip")
+
+  tags = var.tags
+}
+
+resource "aws_elastic_beanstalk_application_version" "v1" {
+  name        = "${var.app_name}-v1"
+  application = aws_elastic_beanstalk_application.app.name
+  description = "Application Version 1.0 - Initial Release"
+  bucket      = aws_s3_bucket.app_versions.id
+  key         = aws_s3_object.app_v1.id
+
+  tags = var.tags
+}
+
+# Blue Environment (Production)
+resource "aws_elastic_beanstalk_environment" "blue" {
+  name                = "${var.app_name}-blue"
+  application         = aws_elastic_beanstalk_application.app.name
+  solution_stack_name = var.solution_stack_name
+  tier                = "WebServer"
+  version_label       = aws_elastic_beanstalk_application_version.v1.name
+
+  # IAM Settings
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "IamInstanceProfile"
+    value     = aws_iam_instance_profile.eb_ec2_profile.name
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "ServiceRole"
+    value     = aws_iam_role.eb_service_role.name
+  }
+
+  # Instance Settings
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "InstanceType"
+    value     = var.instance_type
+  }
+
+  # Environment Type (Load Balanced)
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "EnvironmentType"
+    value     = "LoadBalanced"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "LoadBalancerType"
+    value     = "application"
+  }
+
+  # Auto Scaling Settings
+  setting {
+    namespace = "aws:autoscaling:asg"
+    name      = "MinSize"
+    value     = "1"
+  }
+
+  setting {
+    namespace = "aws:autoscaling:asg"
+    name      = "MaxSize"
+    value     = "2"
+  }
+
+  # Health Reporting
+  setting {
+    namespace = "aws:elasticbeanstalk:healthreporting:system"
+    name      = "SystemType"
+    value     = "enhanced"
+  }
+
+  # Platform Settings
+  setting {
+    namespace = "aws:elasticbeanstalk:environment:process:default"
+    name      = "HealthCheckPath"
+    value     = "/"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment:process:default"
+    name      = "Port"
+    value     = "8080"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment:process:default"
+    name      = "Protocol"
+    value     = "HTTP"
+  }
+
+  # Environment Variables
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "ENVIRONMENT"
+    value     = "blue"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "VERSION"
+    value     = "1.0"
+  }
+
+  # Deployment Policy
+  setting {
+    namespace = "aws:elasticbeanstalk:command"
+    name      = "DeploymentPolicy"
+    value     = "Rolling"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:command"
+    name      = "BatchSizeType"
+    value     = "Percentage"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:command"
+    name      = "BatchSize"
+    value     = "50"
+  }
+
+  # Managed Updates
+  setting {
+    namespace = "aws:elasticbeanstalk:managedactions"
+    name      = "ManagedActionsEnabled"
+    value     = "false"
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      Environment = "blue"
+      Role        = "production"
+    }
+  )
+}
+
+-----
+
+green-environment.tf
+
+# Application Version 2.0 (Green Environment - Staging)
+resource "aws_s3_object" "app_v2" {
+  bucket = aws_s3_bucket.app_versions.id
+  key    = "app-v2.zip"
+  source = "${path.module}/app-v2/app-v2.zip"
+  etag   = filemd5("${path.module}/app-v2/app-v2.zip")
+
+  tags = var.tags
+}
+
+resource "aws_elastic_beanstalk_application_version" "v2" {
+  name        = "${var.app_name}-v2"
+  application = aws_elastic_beanstalk_application.app.name
+  description = "Application Version 2.0 - New Feature Release"
+  bucket      = aws_s3_bucket.app_versions.id
+  key         = aws_s3_object.app_v2.id
+
+  tags = var.tags
+}
+
+# Green Environment (Staging/Pre-production)
+resource "aws_elastic_beanstalk_environment" "green" {
+  name                = "${var.app_name}-green"
+  application         = aws_elastic_beanstalk_application.app.name
+  solution_stack_name = var.solution_stack_name
+  tier                = "WebServer"
+  version_label       = aws_elastic_beanstalk_application_version.v2.name
+
+  # IAM Settings
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "IamInstanceProfile"
+    value     = aws_iam_instance_profile.eb_ec2_profile.name
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "ServiceRole"
+    value     = aws_iam_role.eb_service_role.name
+  }
+
+  # Instance Settings
+  setting {
+    namespace = "aws:autoscaling:launchconfiguration"
+    name      = "InstanceType"
+    value     = var.instance_type
+  }
+
+  # Environment Type (Load Balanced)
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "EnvironmentType"
+    value     = "LoadBalanced"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment"
+    name      = "LoadBalancerType"
+    value     = "application"
+  }
+
+  # Auto Scaling Settings
+  setting {
+    namespace = "aws:autoscaling:asg"
+    name      = "MinSize"
+    value     = "1"
+  }
+
+  setting {
+    namespace = "aws:autoscaling:asg"
+    name      = "MaxSize"
+    value     = "2"
+  }
+
+  # Health Reporting
+  setting {
+    namespace = "aws:elasticbeanstalk:healthreporting:system"
+    name      = "SystemType"
+    value     = "enhanced"
+  }
+
+  # Platform Settings
+  setting {
+    namespace = "aws:elasticbeanstalk:environment:process:default"
+    name      = "HealthCheckPath"
+    value     = "/"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment:process:default"
+    name      = "Port"
+    value     = "8080"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:environment:process:default"
+    name      = "Protocol"
+    value     = "HTTP"
+  }
+
+  # Environment Variables
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "ENVIRONMENT"
+    value     = "green"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:application:environment"
+    name      = "VERSION"
+    value     = "2.0"
+  }
+
+  # Deployment Policy
+  setting {
+    namespace = "aws:elasticbeanstalk:command"
+    name      = "DeploymentPolicy"
+    value     = "Rolling"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:command"
+    name      = "BatchSizeType"
+    value     = "Percentage"
+  }
+
+  setting {
+    namespace = "aws:elasticbeanstalk:command"
+    name      = "BatchSize"
+    value     = "50"
+  }
+
+  # Managed Updates
+  setting {
+    namespace = "aws:elasticbeanstalk:managedactions"
+    name      = "ManagedActionsEnabled"
+    value     = "false"
+  }
+
+  tags = merge(
+    var.tags,
+    {
+      Environment = "green"
+      Role        = "staging"
+    }
+  )
+}
+
+----
+
+main.tf
+
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+  required_version = ">= 1.0"
+}
+
+provider "aws" {
+  region = var.aws_region
+}
+
+# IAM Role for Elastic Beanstalk EC2 instances
+resource "aws_iam_role" "eb_ec2_role" {
+  name = "${var.app_name}-eb-ec2-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+# Attach the AWS managed policy for Web Tier
+resource "aws_iam_role_policy_attachment" "eb_web_tier" {
+  role       = aws_iam_role.eb_ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier"
+}
+
+# Attach the AWS managed policy for Worker Tier
+resource "aws_iam_role_policy_attachment" "eb_worker_tier" {
+  role       = aws_iam_role.eb_ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier"
+}
+
+# Attach the AWS managed policy for Multicontainer Docker
+resource "aws_iam_role_policy_attachment" "eb_multicontainer_docker" {
+  role       = aws_iam_role.eb_ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker"
+}
+
+# Instance Profile
+resource "aws_iam_instance_profile" "eb_ec2_profile" {
+  name = "${var.app_name}-eb-ec2-profile"
+  role = aws_iam_role.eb_ec2_role.name
+
+  tags = var.tags
+}
+
+# IAM Role for Elastic Beanstalk Service
+resource "aws_iam_role" "eb_service_role" {
+  name = "${var.app_name}-eb-service-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "elasticbeanstalk.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = var.tags
+}
+
+# Attach Enhanced Health Reporting policy
+resource "aws_iam_role_policy_attachment" "eb_service_health" {
+  role       = aws_iam_role.eb_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth"
+}
+
+# Attach Managed Updates policy
+resource "aws_iam_role_policy_attachment" "eb_service_managed_updates" {
+  role       = aws_iam_role.eb_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSElasticBeanstalkManagedUpdatesCustomerRolePolicy"
+}
+
+# Elastic Beanstalk Application
+resource "aws_elastic_beanstalk_application" "app" {
+  name        = var.app_name
+  description = "Blue-Green Deployment Demo Application"
+
+  tags = var.tags
+}
+
+# S3 Bucket for application versions
+resource "aws_s3_bucket" "app_versions" {
+  bucket = "${var.app_name}-versions-${data.aws_caller_identity.current.account_id}"
+
+  tags = var.tags
+}
+
+# Block public access to S3 bucket
+resource "aws_s3_bucket_public_access_block" "app_versions" {
+  bucket = aws_s3_bucket.app_versions.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Data source for current AWS account
+data "aws_caller_identity" "current" {}
+
+----
+
+variables.tf
+
+variable "aws_region" {
+  description = "AWS region to deploy resources"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "app_name" {
+  description = "Name of the Elastic Beanstalk application"
+  type        = string
+  default     = "my-app-bluegreen"
+}
+
+variable "solution_stack_name" {
+  description = "Elastic Beanstalk solution stack name (platform)"
+  type        = string
+  # Node.js 20 running on 64bit Amazon Linux 2023
+  default = "64bit Amazon Linux 2023 running Node.js 18"
+}
+
+variable "instance_type" {
+  description = "EC2 instance type for Elastic Beanstalk environments"
+  type        = string
+  default     = "t3.micro"
+}
+
+variable "tags" {
+  description = "Tags to apply to all resources"
+  type        = map(string)
+  default = {
+    Project     = "BlueGreenDeployment"
+    Environment = "Demo"
+    ManagedBy   = "Terraform"
+  }
+}
+-----
+
+  
